@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /viajes/{viajeId} {
+      allow read: if true;
+      allow create: if request.resource.data.estado == 'buscando';
+      allow update: if true;
+      allow delete: if true; // Eliminación autorizada desde consola administrativa
+    }
+    match /encomiendas/{encomiendaId} {
+      allow read, write: if true;
+    }
+    match /conductores/{conductorId} {
+      allow read, write: if true;
+    }
+    match /configuracion/{configId} {
+      allow read, write: if true;
+    }
+    match /transacciones_financieras/{txId} {
+      allow read, write: if true;
+    }
+    match /billeteras/{walletId} {
+      allow read, write: if true;
+    }
+    match /solicitudes_recarga/{solicitudId} {
+      allow read, write: if true;
+    }
+    match /cierres_contables/{cierreId} {
+      allow read, write: if true;
+    }
+  }
+}

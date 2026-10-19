@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AndesMovi - Monitoreo y Movilidad en Vivo</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        .map-container { height: calc(100vh - 140px); min-height: 450px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden">
+
+    <!-- Header / Barra de Navegación -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="bg-brand-600 text-white p-2 rounded-lg font-bold text-lg tracking-wider">AM</div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white">Andes<span class="text-brand-500">Movi</span></h1>
+                <p class="text-xs text-slate-400">Plataforma de Movilidad y Logística - Ecuador</p>
+            </div>
+        </div>
+
+        <!-- Botones de Control Superior -->
+        <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 space-x-1">
+            <button onclick="switchView('vehicles')" id="btn-vehicles" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all bg-brand-600 text-white shadow">Carros en Vivo</button>
+            <button onclick="switchView('offices')" id="btn-offices" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">Oficinas Fijas</button>
+            <button onclick="switchView('dual')" id="btn-dual" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">Vista Dual</button>
+        </div>
+
+        <!-- Soporte -->
+        <div class="hidden md:flex items-center space-x-2 text-xs text-slate-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+            <span class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
+            <span>Soporte: <strong class="text-white">+593 99 856 6503</strong></span>
+        </div>
+    </header>
+
+    <!-- Contenedor Principal de Mapas -->
+    <main class="flex-1 relative flex overflow-hidden">
+        
+        <!-- Mapa 1: Carros en Vivo -->
+        <div id="view-vehicles" class="w-full h-full absolute inset-0 transition-opacity duration-300 flex flex-col">
+            <div class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-1 text-xs text-brand-400 flex justify-between items-center z-10">
+                <span>📡 Telemetría en Tiempo Real (Ecuador)</span>
+                <span id="vehicle-count" class="bg-brand-900/50 text-brand-300 px-2 py-0.5 rounded text-[10px]">Conectando a base de datos...</span>
+            </div>
+            <div id="map-vehicles" class="w-full flex-1"></div>
+        </div>
+
+        <!-- Mapa 2: Oficinas Fijas -->
+        <div id="view-offices" class="w-full h-full absolute inset-0 transition-opacity duration-300 opacity-0 pointer-events-none flex flex-col">
+            <div class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-1 text-xs text-amber-400 flex justify-between items-center z-10">
+                <span>🏢 Red de Terminales y Agencias (Incluye Tulcanaza - Av. Centenario Sector Ex Bomba)</span>
+                <span class="bg-amber-950/50 text-amber-300 px-2 py-0.5 rounded text-[10px]">Red Fija Oficial</span>
+            </div>
+            <div id="map-offices" class="w-full flex-1"></div>
+        </div>
+
+        <!-- Vista Dual (Ambos Lado a Lado) -->
+        <div id="view-dual" class="w-full h-full absolute inset-0 transition-opacity duration-300 opacity-0 pointer-events-none grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800">
+            <div class="flex flex-col h-full bg-slate-950">
+                <div class="bg-slate-900 px-3 py-1 text-[11px] text-brand-400 font-medium">Carros en Vivo</div>
+                <div id="map-dual-vehicles" class="flex-1 w-full"></div>
+            </div>
+            <div class="flex flex-col h-full bg-slate-950">
+                <div class="bg-slate-900 px-3 py-1 text-[11px] text-amber-400 font-medium">Oficinas Fijas</div>
+                <div id="map-dual-offices" class="flex-1 w-full"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script>
+        // --- INICIALIZACIÓN DE MAPAS ---
+        let mapVehicles = L.map('map-vehicles', { zoomControl: false }).setView([-1.831239, -78.183406], 7);
+        let mapOffices = L.map('map-offices', { zoomControl: false }).setView([0.8172, -77.7145], 14); // Enfocado exactamente en Tulcán / Tulcanaza
+        
+        let mapDualVehicles = L.map('map-dual-vehicles', { zoomControl: false }).setView([-1.831239, -78.183406], 6);
+        let mapDualOffices = L.map('map-dual-offices', { zoomControl: false }).setView([0.8172, -77.7145], 14);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(mapVehicles);
+        L.control.zoom({ position: 'bottomright' }).addTo(mapOffices);
+        L.control.zoom({ position: 'bottomright' }).addTo(mapDualVehicles);
+        L.control.zoom({ position: 'bottomright' }).addTo(mapDualOffices);
+
+        // Capa Oscura CartoDB Dark Matter
+        const darkTileLayer = () => L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{z}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19
+        });
+
+        darkTileLayer().addTo(mapVehicles);
+        darkTileLayer().addTo(mapOffices);
+        darkTileLayer().addTo(mapDualVehicles);
+        darkTileLayer().addTo(mapDualOffices);
+
+        // Capas de Marcadores
+        let vehiclesLayer = L.layerGroup().addTo(mapVehicles);
+        let dualVehiclesLayer = L.layerGroup().addTo(mapDualVehicles);
+        
+        let officesLayer = L.layerGroup().addTo(mapOffices);
+        let dualOfficesLayer = L.layerGroup().addTo(mapDualOffices);
+
+        // --- DATOS FIJOS: OFICINAS (Punto exacto de la Tulcanaza y demás agencias) ---
+        const officesData = [
+            {
+                name: "Agencia Tulcanaza - AndesMovi (Ex Bomba)",
+                coords: [0.8172, -77.7145], // Punto exacto Av. Centenario y Veintimilla, Tulcán
+                address: "Av. Centenario y Veintimilla (Sector Ex Bomba / Tulcanaza), Tulcán",
+                phone: "+593 99 856 6503"
+            },
+            {
+                name: "Terminal Terrestre de Tulcán",
+                coords: [0.8062, -77.7188],
+                address: "Av. Universitaria, Tulcán",
+                phone: "+593 99 856 6503"
+            },
+            {
+                name: "Terminal Terrestre Carcelén Quito",
+                coords: [-0.0982, -78.4762],
+                address: "Panamericana Norte, Quito",
+                phone: "+593 99 856 6503"
+            },
+            {
+                name: "Terminal Terrestre Quitumbe Quito",
+                coords: [-0.3012, -78.5521],
+                address: "Av. Cóndor Ñan, Quito Sur",
+                phone: "+593 99 856 6503"
+            },
+            {
+                name: "Terminal Terrestre Guayaquil",
+                coords: [-2.1468, -79.8832],
+                address: "Av. Benjamín Rosales, Guayaquil",
+                phone: "+593 99 856 6503"
+            }
+        ];
+
+        function renderOffices() {
+            officesLayer.clearLayers();
+            dualOfficesLayer.clearLayers();
+
+            officesData.forEach(office => {
+                const htmlIcon = L.divIcon({
+                    className: 'custom-office-icon',
+                    html: `<div style="background-color: #f59e0b; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 12px #f59e0b;"></div>`,
+                    iconSize: [16, 16]
+                });
+
+                const popupContent = `<div style="color: #0f172a; font-family: sans-serif;">
+                    <strong style="font-size: 14px; color: #b45309;">${office.name}</strong><br>
+                    <p style="margin: 4px 0; font-size: 12px;">📍 ${office.address}</p>
+                    <span style="font-size: 11px; color: #16a34a; font-weight: bold;">📞 Soporte: ${office.phone}</span>
+                </div>`;
+
+                L.marker(office.coords, { icon: htmlIcon }).bindPopup(popupContent).addTo(officesLayer);
+                L.marker(office.coords, { icon: htmlIcon }).bindPopup(popupContent).addTo(dualOfficesLayer);
+            });
+        }
+        renderOffices();
+
+        // --- TELEMETRÍA DE VEHÍCULOS (Simulador base) ---
+        let simulatedVehicles = [
+            { id: 'AM-001 (Quito)', lat: -0.2295, lng: -78.5243, city: 'Quito' },
+            { id: 'AM-002 (Guayaquil)', lat: -2.1894, lng: -79.8891, city: 'Guayaquil' },
+            { id: 'AM-003 (Cuenca)', lat: -2.9001, lng: -79.0059, city: 'Cuenca' },
+            { id: 'AM-004 (Tulcán Ex Bomba)', lat: 0.8172, lng: -77.7145, city: 'Tulcán' }
+        ];
+
+        function updateVehiclesOnMap(vehicles) {
+            vehiclesLayer.clearLayers();
+            dualVehiclesLayer.clearLayers();
+
+            vehicles.forEach(v => {
+                const vehicleIcon = L.divIcon({
+                    className: 'custom-vehicle-icon',
+                    html: `<div style="background-color: #22c55e; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 10px #22c55e;"></div>`,
+                    iconSize: [14, 14]
+                });
+
+                const popup = `<div style="color: #0f172a; font-family: sans-serif;">
+                    <strong>🚗 Unidad: ${v.id}</strong><br>
+                    <span style="font-size: 12px; color: #16a34a;">En movimiento (${v.city})</span>
+                </div>`;
+
+                L.marker([v.lat, v.lng], { icon: vehicleIcon }).bindPopup(popup).addTo(vehiclesLayer);
+                L.marker([v.lat, v.lng], { icon: vehicleIcon }).bindPopup(popup).addTo(dualVehiclesLayer);
+            });
+
+            document.getElementById('vehicle-count').innerText = `${vehicles.length} unidades activas`;
+        }
+
+        updateVehiclesOnMap(simulatedVehicles);
+        setInterval(() => {
+            simulatedVehicles = simulatedVehicles.map(v => ({
+                ...v,
+                lat: v.lat + (Math.random() - 0.5) * 0.008,
+                lng: v.lng + (Math.random() - 0.5) * 0.008
+            }));
+            updateVehiclesOnMap(simulatedVehicles);
+        }, 4000);
+
+        // --- CONTROL DE VISTAS (Pestañas Superiores) ---
+        function switchView(view) {
+            const vVehicles = document.getElementById('view-vehicles');
+            const vOffices = document.getElementById('view-offices');
+            const vDual = document.getElementById('view-dual');
+
+            const bVehicles = document.getElementById('btn-vehicles');
+            const bOffices = document.getElementById('btn-offices');
+            const bDual = document.getElementById('btn-dual');
+
+            [vVehicles, vOffices, vDual].forEach(el => {
+                el.classList.add('opacity-0', 'pointer-events-none');
+                el.classList.remove('opacity-100');
+            });
+            [bVehicles, bOffices, bDual].forEach(el => {
+                el.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white";
+            });
+
+            if (view === 'vehicles') {
+                vVehicles.classList.remove('opacity-0', 'pointer-events-none');
+                vVehicles.classList.add('opacity-100');
+                bVehicles.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all bg-brand-600 text-white shadow";
+                mapVehicles.invalidateSize();
+            } else if (view === 'offices') {
+                vOffices.classList.remove('opacity-0', 'pointer-events-none');
+                vOffices.classList.add('opacity-100');
+                bOffices.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all bg-amber-600 text-white shadow";
+                mapOffices.invalidateSize();
+            } else if (view === 'dual') {
+                vDual.classList.remove('opacity-0', 'pointer-events-none');
+                vDual.classList.add('opacity-100');
+                bDual.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all bg-slate-800 text-white shadow border border-slate-700";
+                mapDualVehicles.invalidateSize();
+                mapDualOffices.invalidateSize();
+            }
+        }
+    </script>
+</body>
+</html>

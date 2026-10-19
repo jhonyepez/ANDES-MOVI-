@@ -1,0 +1,6 @@
+{
+  "name": "AndesMovi Admin - Consola de Radio-Despacho Ecuador",
+  "description": "Consola Administrativa Corporativa y Central de Radio-Despacho para AndesMovi Ecuador: monitoreo de flota, validación KYC de choferes, despacho radial y gestión de tarifas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
